@@ -1,0 +1,16 @@
+# vim: ft=toml
+
+[hooks]
+pre-merge = "just"
+
+[[pre-merge-skills]]
+name      = "simplify"
+rationale = "Prune premature abstraction, dead code, and inefficiency on every diff before it lands."
+
+[[pre-merge-skills]]
+name      = "review"
+rationale = "Mandatory second-pass review on the pending changes before merging."
+
+[[pre-merge-skills]]
+name      = "eng:loose-ends"
+rationale = "Surface deferred work, in-diff TODOs, and adjacent-improvement candidates so nothing rots after merge."

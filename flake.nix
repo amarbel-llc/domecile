@@ -209,6 +209,22 @@
             docs-json = docs.options.json;
             docs-jsonModuleMaintainers = docs.jsonModuleMaintainers;
             docs-manpages = docs.manPages;
+
+            docs-domecile = pkgs.stdenvNoCC.mkDerivation {
+              pname = "domecile-doc";
+              version = releaseInfo.release;
+              src = ./doc;
+              nativeBuildInputs = [ pkgs.scdoc ];
+              dontUnpack = true;
+              dontBuild = true;
+              installPhase = ''
+                mkdir -p $out/share/man/man7
+                for f in $src/*.7.scd; do
+                  [ -e "$f" ] || continue
+                  scdoc < "$f" > "$out/share/man/man7/$(basename "$f" .scd)"
+                done
+              '';
+            };
           }
         );
 
