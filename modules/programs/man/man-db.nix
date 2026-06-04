@@ -15,6 +15,27 @@ let
     ;
   cfg = config.programs.man;
   cfgManDb = config.programs.man.man-db;
+
+  # The manual pages the cache is generated from. When contentAddressed is
+  # set, the configured manualPages (the default buildEnv *or* a user
+  # override) is wrapped in a content-addressed copy so the cache's input
+  # path is keyed on man-page content rather than the identity of the input
+  # packages — unrelated home.packages bumps that leave /share/man
+  # byte-identical then reuse the same store path, and mandb is not re-run.
+  effectiveManualPages =
+    if cfgManDb.contentAddressed then
+      pkgs.runCommand "man-paths-ca"
+        {
+          __contentAddressed = true;
+          outputHashMode = "recursive";
+          outputHashAlgo = "sha256";
+        }
+        ''
+          mkdir -p "$out/share/man"
+          cp -rL ${cfgManDb.manualPages}/share/man/. "$out/share/man/"
+        ''
+    else
+      cfgManDb.manualPages;
 in
 {
   options.programs.man.man-db = {
@@ -60,7 +81,25 @@ in
 
         Advanced users can override this with a content-addressed derivation
         so the cache only rebuilds when man-page *content* changes rather than
-        whenever any package in {option}`home.packages` changes.
+        whenever any package in {option}`home.packages` changes. See
+        {option}`programs.man.man-db.contentAddressed` for a built-in way to
+        do this without hand-rolling the wrapper.
+      '';
+    };
+
+    contentAddressed = mkEnableOption "" // {
+      description = ''
+        Wrap {option}`programs.man.man-db.manualPages` in a content-addressed
+        derivation so the man-db cache is keyed on man-page *content* rather
+        than on the identity of the packages in {option}`home.packages`. With
+        this enabled, an unrelated package bump that leaves the man pages
+        byte-identical reuses the same cache store path, so the (slow) mandb
+        whatis re-parse is skipped.
+
+        Requires the `ca-derivations` experimental Nix feature to be enabled
+        on every host that evaluates this configuration. Defaults to false so
+        the module works on stock Nix; opt in only where `ca-derivations` is
+        available.
       '';
     };
   };
@@ -74,7 +113,8 @@ in
     home.file = mkIf (cfg.generateCaches && cfg.package != null) {
       ".manpath".text =
         let
-          # Generate a database of all manpages in the configured manualPages.
+          # Generate a database of all manpages in the configured manualPages
+          # (content-addressed first when contentAddressed is set).
           manualCache =
             pkgs.runCommandLocal "man-cache"
               {
@@ -83,10 +123,10 @@ in
               ''
                 # Generate a temporary man.conf so mandb knows where to
                 # write cache files.
-                echo "MANDB_MAP ${cfgManDb.manualPages}/share/man $out" > man.conf
+                echo "MANDB_MAP ${effectiveManualPages}/share/man $out" > man.conf
                 # Run mandb to generate cache files:
                 mandb -C man.conf --no-straycats --create \
-                  ${cfgManDb.manualPages}/share/man
+                  ${effectiveManualPages}/share/man
               '';
         in
         ''
