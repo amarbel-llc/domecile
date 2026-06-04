@@ -2,6 +2,7 @@
   description = "Home Manager for Nix";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+  inputs.nixpkgs-master.url = "github:NixOS/nixpkgs/d233902339c02a9c334e7e593de68855ad26c4cb";
 
   outputs =
     {
