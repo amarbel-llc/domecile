@@ -136,6 +136,15 @@ in
       home.activation.setupLaunchAgents =
         lib.hm.dag.entryAfter [ "writeBoundary" ] # Bash
           ''
+            # Get the OS major version: `launchctl bootout --wait` only exists on
+            # macOS >= 26. On older releases (e.g. 15.x Sequoia) passing --wait
+            # makes launchctl report the target as an "Unrecognized target
+            # specifier", so the agent is never unloaded and the subsequent
+            # bootstrap fails with I/O error 5. Gate on the version and fall back
+            # to a plain bootout + brief settle on <26. (Ported from upstream
+            # nix-community/home-manager.)
+            version="$(/usr/bin/sw_vers --productVersion | cut -d. -f 1)"
+
             # Disable errexit to ensure we process all agents even if some fail
             set +e
 
@@ -146,14 +155,29 @@ in
 
               verboseEcho "Stopping agent '$domain/$agentName'..."
               local bootout_output
-              bootout_output=$(run /bin/launchctl bootout --wait "$domain/$agentName" 2>&1) || {
-                # Only show warning if it's not the common "No such process" error
-                if [[ "$bootout_output" != *"No such process"* ]]; then
-                  warnEcho "Failed to stop agent '$domain/$agentName': $bootout_output"
-                else
-                  verboseEcho "Agent '$domain/$agentName' was not running"
+
+              if [[ "$version" -ge "26" ]]; then
+                if bootout_output=$(run /bin/launchctl bootout --wait "$domain/$agentName" 2>&1); then
+                  # --wait already makes sure it was unloaded (>=26 only)
+                  return 0
                 fi
-              }
+              else
+                if bootout_output=$(run /bin/launchctl bootout "$domain/$agentName" 2>&1); then
+                  # Give the system a moment to fully unload the agent on <26
+                  run sleep 1
+                  return 0
+                fi
+              fi
+
+              # Non-zero exit past this point. Only warn on a real failure, not
+              # the common harmless cases.
+              if [[ "$bootout_output" != *"No such process"* && "$bootout_output" != *"Domain does not support specified action"* ]]; then
+                warnEcho "Failed to stop agent '$domain/$agentName': $bootout_output"
+                return 1
+              else
+                verboseEcho "Agent '$domain/$agentName' was not running"
+                return 2
+              fi
             }
 
             installAndBootstrapAgent() {
