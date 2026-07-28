@@ -1,3 +1,7 @@
+# treefmt comes from the devShell and is invoked via `nix develop --command`,
+# so recipes work from a bare shell and inside the spinclass merge hook, not
+# only under an active direnv devshell.
+
 default: lint build test
 
 [group("pre-build")]
@@ -6,7 +10,7 @@ lint: lint-fmt
 # read-only formatting check via treefmt
 [group("pre-build")]
 lint-fmt:
-  treefmt --ci
+  nix develop --command treefmt --ci
 
 [group("build")]
 build: build-doc
@@ -42,7 +46,7 @@ test-integration:
 # format codebase with treefmt
 [group("codemod")]
 codemod-fmt:
-  treefmt
+  nix develop --command treefmt
 
 # create a news entry for a module change
 [group("maintenance")]
